@@ -1,0 +1,35 @@
+# ---------- Python ----------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# ---------- 环境变量 / 密钥（含 API key，严禁入库） ----------
+.env
+*.env
+config.local.py
+
+# ---------- 运行期生成的本地数据（不入库） ----------
+data/
+signals.log
+report.json
+paper_account.json
+paper_trades.csv
+paper_equity.csv
+
+# ---------- 本地用户数据（自选股 / 持仓 / 模拟盘） ----------
+watchlist.json
+holdings.json
+
+# ---------- 项目内自带的依赖目录（建议改用 pip install -r requirements.txt） ----------
+vendor/
+
+# ---------- 临时 / 测试文件 ----------
+.tmp/
+
+# ---------- IDE / 系统 ----------
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
