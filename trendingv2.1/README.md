@@ -4,7 +4,7 @@ A-share **local helper**: dual-MA + news sentiment → buy/sell/must-sell advice
 
 **No live broker trading.** Paper only executes locally; real holdings never auto-sell.
 
-Canonical app path in this repo: `trendingv2.1/` (project name / spelling as given).
+This directory is a **standalone** project (`config.PROJECT_NAME = "trendingv2.1"`). It does **not** depend on, replace, or share runtime state with any older helper path (for example a separate `trading/` tree). Run and develop only under `trendingv2.1/`.
 
 ## Quick start
 
@@ -18,7 +18,7 @@ python app.py                            # http://127.0.0.1:5000
 python -m unittest discover -s tests -v
 ```
 
-## Risk / execution (kept from refactor)
+## Risk / execution
 
 | Rule | Behavior |
 |------|----------|
@@ -28,8 +28,6 @@ python -m unittest discover -s tests -v
 | Equity history | Daily append to `paper_equity.csv` |
 | Data harden | HTML / bad JSON caught; optional Fuyao stub if `FUYAO_API_KEY` set |
 | Sector | `600664` → 医药 |
-
-Config identity: `config.PROJECT_NAME = "trendingv2.1"`.
 
 ## Layout
 
