@@ -147,6 +147,13 @@ def build_daily_report(
     if trade is None:
         trade = bool(config.REPORT_TRADE_DEFAULT)
 
+    # Pick up dashboard / providers.json changes without restarting the process
+    try:
+        import settings_store
+        settings_store.apply()
+    except Exception:  # noqa: BLE001
+        pass
+
     set_progress("新闻抓取", "抓取 CCTV/财联社/个股新闻…", 3)
     holding_items = holdings_mod.load()
     holding_map = _holding_lookup(holding_items)

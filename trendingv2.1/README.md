@@ -20,7 +20,19 @@ python -m unittest discover -s tests -v
 
 ## Switch API providers
 
-Providers are **config / env driven**. Defaults keep the previous eastmoney + sina + optional LLM behaviour.
+### In the web board (recommended)
+
+1. Start `python app.py` → open http://127.0.0.1:5000
+2. Use the **供应商设置** panel at the top (also linked from the header button)
+3. Pick **行情 / 大模型 / 新闻**, optionally fill OpenAI-compatible URL or HTTP K-line keys
+4. Click **保存供应商** → settings write to local `providers.json` and apply in-process
+5. **刷新今日分析** uses the new providers immediately (no Flask restart)
+
+`providers.json` is gitignored. Secrets can stay in env vars; the panel only overrides what you save.
+
+### Env / config (CLI & defaults)
+
+Same knobs work via environment variables or `config.py`. Local `providers.json` (from the UI) **overrides** env when present.
 
 | Subsystem | Env / config | Values |
 |-----------|--------------|--------|
@@ -87,8 +99,9 @@ Implementation lives under `providers/` (`market.py`, `llm_providers.py`, `news_
 | File | Role |
 |------|------|
 | `config.py` | Thresholds, weights, risk, provider env knobs, `PROJECT_NAME` |
+| `settings_store.py` | Dashboard `providers.json` overrides (apply without restart) |
 | `providers/` | Market / LLM / news adapters + status |
-| `runner.py` / `app.py` | CLI / Flask board |
+| `runner.py` / `app.py` | CLI / Flask board (`/api/providers`) |
 | `report.py` | Daily pipeline + `holdings_risk` + provider status |
 | `signals.py` / `risk.py` / `paper.py` | Advice, exits, paper + equity curve |
 | `data.py` / `screener.py` | Quotes + screen |

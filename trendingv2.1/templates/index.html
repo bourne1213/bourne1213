@@ -252,6 +252,50 @@
     margin-top: 8px; color: var(--mut); font-size: 11px; text-align: center;
   }
 
+  /* —— Provider settings —— */
+  .settings-panel {
+    border-color: rgba(61, 184, 168, 0.45);
+    background:
+      linear-gradient(135deg, rgba(61, 184, 168, 0.08), transparent 42%),
+      var(--panel);
+  }
+  .settings-panel h2 { color: var(--accent); letter-spacing: 0.06em; }
+  .settings-active {
+    display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px;
+  }
+  .settings-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+  }
+  @media (max-width: 820px) {
+    .settings-grid { grid-template-columns: 1fr; }
+  }
+  .field label {
+    display: block; font-size: 11px; color: var(--mut);
+    letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 6px;
+  }
+  .field select, .field input[type="text"], .field input[type="password"] {
+    width: 100%; background: #0d1218; border: 1px solid var(--bd); color: var(--txt);
+    border-radius: 8px; padding: 9px 10px; font-size: 13px; font-family: var(--font);
+  }
+  .field select:focus, .field input:focus {
+    outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim);
+  }
+  .field .sub { color: var(--mut); font-size: 11px; margin-top: 5px; }
+  .settings-advanced {
+    margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--bd-soft);
+  }
+  .settings-advanced summary {
+    cursor: pointer; color: var(--accent); font-size: 13px; font-weight: 600;
+    list-style: none;
+  }
+  .settings-advanced summary::-webkit-details-marker { display: none; }
+  .settings-msg {
+    margin-top: 10px; font-size: 13px; color: var(--accent); min-height: 1.2em;
+  }
+  .settings-msg.err { color: var(--up); }
+
   @keyframes fadeUp {
     from { opacity: 0; transform: translateY(8px); }
     to { opacity: 1; transform: translateY(0); }
@@ -267,6 +311,7 @@
       <div class="meta-line" id="gen-time">加载中…</div>
     </div>
     <div class="actions">
+      <button class="ghost" onclick="document.getElementById('settings').scrollIntoView({behavior:'smooth'})">供应商设置</button>
       <button class="ghost" onclick="refreshPnl()">刷新持仓盈亏</button>
       <button id="btn-refresh" onclick="refreshReport()">刷新今日分析</button>
     </div>
@@ -278,6 +323,68 @@
       <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
       <div class="progress-text" id="progress-text">准备中…</div>
     </div>
+  </div>
+
+  <div class="panel settings-panel" id="settings">
+    <h2>供应商设置 · 切换行情 / 大模型 / 新闻</h2>
+    <div class="hint">在看板里直接换 API 源，保存到本地 <code>providers.json</code>。下一轮「刷新今日分析」立即生效，无需重启。密钥也可继续用环境变量。</div>
+    <div class="settings-active" id="prov-active"><div class="loading">读取当前供应商…</div></div>
+    <div class="settings-grid">
+      <div class="field">
+        <label for="prov-market">行情数据</label>
+        <select id="prov-market"></select>
+        <div class="sub" id="prov-market-sub">自动时按 Fuyao→同花顺→东财→新浪回退</div>
+      </div>
+      <div class="field">
+        <label for="prov-llm">大模型 / 情绪</label>
+        <select id="prov-llm"></select>
+        <div class="sub" id="prov-llm-sub">失败时自动回退词典法，状态芯片会显示</div>
+      </div>
+      <div class="field">
+        <label for="prov-news">新闻源</label>
+        <select id="prov-news"></select>
+        <div class="sub">抓取失败不会打断看板</div>
+      </div>
+    </div>
+    <details class="settings-advanced">
+      <summary>高级：OpenAI 兼容地址 / HTTP 行情 key（可选）</summary>
+      <div class="settings-grid" style="margin-top:12px;">
+        <div class="field">
+          <label for="prov-llm-base">LLM_BASE_URL</label>
+          <input id="prov-llm-base" type="text" placeholder="https://api.deepseek.com/v1">
+        </div>
+        <div class="field">
+          <label for="prov-llm-model">LLM_MODEL</label>
+          <input id="prov-llm-model" type="text" placeholder="deepseek-chat">
+        </div>
+        <div class="field">
+          <label for="prov-llm-key">LLM_API_KEY（留空=不改）</label>
+          <input id="prov-llm-key" type="password" placeholder="sk-… 或环境变量">
+        </div>
+        <div class="field">
+          <label for="prov-fuyao-url">FUYAO_BASE_URL</label>
+          <input id="prov-fuyao-url" type="text" placeholder="https://…/v1">
+        </div>
+        <div class="field">
+          <label for="prov-fuyao-key">FUYAO_API_KEY（留空=不改）</label>
+          <input id="prov-fuyao-key" type="password" placeholder="可选">
+        </div>
+        <div class="field">
+          <label for="prov-ths-url">TONGHUASHUN_BASE_URL</label>
+          <input id="prov-ths-url" type="text" placeholder="https://…/v1">
+        </div>
+        <div class="field">
+          <label for="prov-ths-key">TONGHUASHUN_API_KEY（留空=不改）</label>
+          <input id="prov-ths-key" type="password" placeholder="可选">
+        </div>
+      </div>
+    </details>
+    <div class="row" style="margin-top:14px;">
+      <button onclick="saveProviders()">保存供应商</button>
+      <button class="ghost" onclick="testProviders()">检测连接</button>
+      <button class="ghost" onclick="resetProviders()">恢复默认</button>
+    </div>
+    <div class="settings-msg" id="prov-msg"></div>
   </div>
 
   <div class="panel">
@@ -612,6 +719,121 @@ async function sellHolding(){
   } catch(e){ alert('卖出失败：'+e); }
 }
 
+function fillSelect(sel, options, current){
+  sel.innerHTML = '';
+  let found = false;
+  (options||[]).forEach(o=>{
+    const opt = document.createElement('option');
+    opt.value = o.id; opt.textContent = o.label;
+    if(o.id === current){ opt.selected = true; found = true; }
+    sel.appendChild(opt);
+  });
+  if(!found && current){
+    const opt = document.createElement('option');
+    opt.value = current; opt.textContent = current + '（当前）';
+    opt.selected = true; sel.appendChild(opt);
+  }
+}
+
+function renderProviderActive(d){
+  const a = d.active || {};
+  const st = d.status || {};
+  const chain = (a.market_chain||[]).map(c=>c.label||c.id).join(' → ') || a.market;
+  const bits = [
+    chip('行情', !!(st.market && st.market.ok !== false), a.market || 'auto', chain),
+    chip('大模型', a.llm_resolved === 'openai' || a.llm_resolved === 'dictionary', (a.llm_resolved||a.llm||'—') + (a.llm_resolved==='openai' && a.llm_model?' · '+a.llm_model:''), a.llm_resolved === 'dictionary' ? '词典法' : (st.llm && st.llm.detail) || ''),
+    chip('新闻', true, a.news_enabled && a.news_enabled.length ? a.news_enabled.join(',') : (a.news||'none'), d.has_local_file ? '本地 providers.json' : '环境/默认'),
+  ];
+  document.getElementById('prov-active').innerHTML = bits.join('');
+}
+
+async function loadProviders(){
+  try {
+    const d = await getJSON('/api/providers');
+    const cat = d.catalog || {};
+    const eff = d.effective || {};
+    fillSelect(document.getElementById('prov-market'), cat.market_providers, eff.MARKET_PROVIDER);
+    fillSelect(document.getElementById('prov-llm'), cat.llm_providers, eff.LLM_PROVIDER);
+    fillSelect(document.getElementById('prov-news'), cat.news_presets, eff.NEWS_SOURCES);
+    document.getElementById('prov-llm-base').value = eff.LLM_BASE_URL || '';
+    document.getElementById('prov-llm-model').value = eff.LLM_MODEL || '';
+    document.getElementById('prov-llm-key').value = '';
+    document.getElementById('prov-llm-key').placeholder = eff.LLM_API_KEY_set ? '已配置（留空不改）' : 'sk-… 或环境变量';
+    document.getElementById('prov-fuyao-url').value = eff.FUYAO_BASE_URL || '';
+    document.getElementById('prov-fuyao-key').value = '';
+    document.getElementById('prov-fuyao-key').placeholder = eff.FUYAO_API_KEY_set ? '已配置（留空不改）' : '可选';
+    document.getElementById('prov-ths-url').value = eff.TONGHUASHUN_BASE_URL || '';
+    document.getElementById('prov-ths-key').value = '';
+    document.getElementById('prov-ths-key').placeholder = eff.TONGHUASHUN_API_KEY_set ? '已配置（留空不改）' : '可选';
+    renderProviderActive(d);
+  } catch(e){
+    document.getElementById('prov-active').innerHTML = '<div class="loading">读取失败：'+esc(e)+'</div>';
+  }
+}
+
+async function saveProviders(){
+  const msg = document.getElementById('prov-msg');
+  msg.className = 'settings-msg';
+  msg.textContent = '保存中…';
+  const body = {
+    MARKET_PROVIDER: document.getElementById('prov-market').value,
+    LLM_PROVIDER: document.getElementById('prov-llm').value,
+    NEWS_SOURCES: document.getElementById('prov-news').value,
+    LLM_BASE_URL: document.getElementById('prov-llm-base').value.trim(),
+    LLM_MODEL: document.getElementById('prov-llm-model').value.trim(),
+    FUYAO_BASE_URL: document.getElementById('prov-fuyao-url').value.trim(),
+    TONGHUASHUN_BASE_URL: document.getElementById('prov-ths-url').value.trim(),
+  };
+  const llmKey = document.getElementById('prov-llm-key').value.trim();
+  const fuyaoKey = document.getElementById('prov-fuyao-key').value.trim();
+  const thsKey = document.getElementById('prov-ths-key').value.trim();
+  if(llmKey) body.LLM_API_KEY = llmKey;
+  if(fuyaoKey) body.FUYAO_API_KEY = fuyaoKey;
+  if(thsKey) body.TONGHUASHUN_API_KEY = thsKey;
+  try {
+    const r = await fetch('/api/providers', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+    const d = await r.json();
+    if(!r.ok || d.ok === false){ msg.className='settings-msg err'; msg.textContent = d.error || '保存失败'; return; }
+    renderProviderActive(d);
+    document.getElementById('prov-llm-key').value = '';
+    document.getElementById('prov-fuyao-key').value = '';
+    document.getElementById('prov-ths-key').value = '';
+    msg.textContent = d.message || '已保存。正在按新供应商刷新分析…';
+    await loadReport(true);
+    await loadProviders();
+  } catch(e){ msg.className='settings-msg err'; msg.textContent = '保存失败：'+e; }
+}
+
+async function testProviders(){
+  const msg = document.getElementById('prov-msg');
+  msg.className = 'settings-msg';
+  msg.textContent = '检测中…';
+  try {
+    const r = await fetch('/api/providers/test', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({target:'all'})});
+    const d = await r.json();
+    const parts = [];
+    const res = d.results || {};
+    if(res.market) parts.push('行情 ' + (res.market.ok?'OK':'失败') + ' · ' + (res.market.detail||''));
+    if(res.llm) parts.push('大模型 ' + (res.llm.ok?'OK':'未通/词典') + ' · ' + (res.llm.detail||''));
+    if(res.news) parts.push('新闻 · ' + (res.news.detail||''));
+    msg.textContent = parts.join('  |  ');
+    await loadProviders();
+  } catch(e){ msg.className='settings-msg err'; msg.textContent = '检测失败：'+e; }
+}
+
+async function resetProviders(){
+  if(!confirm('恢复环境变量/默认供应商设置？（将删除本地 providers.json）')) return;
+  const msg = document.getElementById('prov-msg');
+  msg.className = 'settings-msg';
+  try {
+    const r = await fetch('/api/providers', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({reset:true})});
+    const d = await r.json();
+    msg.textContent = '已恢复默认。';
+    await loadProviders();
+  } catch(e){ msg.className='settings-msg err'; msg.textContent = '重置失败：'+e; }
+}
+
+loadProviders();
 loadReport(false);
 loadRecs();
 loadWatch();

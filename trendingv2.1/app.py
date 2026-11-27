@@ -30,6 +30,8 @@ import holdings
 import watchlist
 import screener
 import risk
+import settings_store
+import llm
 
 # 保护「读-改-写」操作，避免多标签页并发互相覆盖
 _io_lock = threading.Lock()
@@ -131,9 +133,83 @@ def index():
     return render_template("index.html")
 
 
+@app.route("/api/providers", methods=["GET", "POST"])
+def api_providers():
+    """Read / update pluggable provider settings (dashboard Settings panel)."""
+    if request.method == "GET":
+        return jsonify(settings_store.public_view())
+
+    patch = request.get_json(force=True, silent=True)
+    if not isinstance(patch, dict):
+        return jsonify({"ok": False, "error": "数据格式错误（应为对象）"}), 400
+    allowed = set(settings_store.OVERRIDABLE)
+    unknown = [k for k in patch if k not in allowed and k != "reset"]
+    if unknown:
+        return jsonify({"ok": False, "error": f"未知字段: {', '.join(unknown)}"}), 400
+
+    with _io_lock:
+        if patch.get("reset") is True:
+            settings_store.save_raw({})
+            settings_store.apply({})
+        else:
+            settings_store.merge_and_save({k: v for k, v in patch.items() if k != "reset"})
+    view = settings_store.public_view()
+    view["saved"] = True
+    view["message"] = "已保存。点「刷新今日分析」即可按新供应商取数（无需重启）。"
+    return jsonify(view)
+
+
+@app.route("/api/providers/test", methods=["POST"])
+def api_providers_test():
+    """Quick connectivity / resolution check for the currently applied providers."""
+    settings_store.apply()
+    body = request.get_json(force=True, silent=True) or {}
+    target = str(body.get("target", "all")).lower()
+    results: dict = {}
+
+    if target in ("all", "llm"):
+        ok, msg = llm.test_connection()
+        results["llm"] = {
+            "ok": ok,
+            "detail": msg,
+            "provider": settings_store.public_view()["active"]["llm_resolved"],
+            "model": config.LLM_MODEL,
+        }
+
+    if target in ("all", "market"):
+        from providers import market as market_providers
+        try:
+            chain = [
+                {"id": key, "label": label}
+                for _, label, key in market_providers.resolve_chain()
+            ]
+            results["market"] = {
+                "ok": bool(chain),
+                "detail": "将尝试: " + " → ".join(c["label"] for c in chain) if chain else "无可用源",
+                "chain": chain,
+                "provider": config.MARKET_PROVIDER,
+            }
+        except Exception as exc:  # noqa: BLE001
+            results["market"] = {"ok": False, "detail": str(exc)[:160]}
+
+    if target in ("all", "news"):
+        from providers import news_providers
+        enabled = news_providers.parse_enabled_sources()
+        results["news"] = {
+            "ok": True,
+            "detail": ("已选: " + ",".join(enabled)) if enabled else "新闻源已关闭",
+            "enabled": enabled,
+            "sources": config.NEWS_SOURCES,
+        }
+
+    return jsonify({"ok": True, "results": results, "active": settings_store.public_view()["active"]})
+
+
 @app.route("/api/report")
 def api_report():
     refresh = request.args.get("refresh") == "1"
+    # Always re-apply local providers.json so Settings panel changes take effect
+    settings_store.apply()
     cached = report.load_cached_report()
     if not refresh and cached:
         # 缓存日期校验：仅当天生成的缓存才直接返回，跨天自动重建

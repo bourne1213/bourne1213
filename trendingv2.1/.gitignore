@@ -18,9 +18,11 @@ paper_account.json
 paper_trades.csv
 paper_equity.csv
 
-# ---------- 本地用户数据（自选股 / 持仓 / 模拟盘） ----------
+# ---------- 本地用户数据（自选股 / 持仓 / 模拟盘 / 供应商设置） ----------
 watchlist.json
 holdings.json
+providers.json
+providers.tmp.json
 
 # ---------- 项目内自带的依赖目录（建议改用 pip install -r requirements.txt） ----------
 vendor/
