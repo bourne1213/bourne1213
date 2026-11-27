@@ -2,10 +2,9 @@
 """
 行情数据层。
 
-真实模式数据源（按顺序自动切换，任一成功即返回）：
-1. 可选 Fuyao 适配（仅当 FUYAO_API_KEY 已配置；否则跳过）
-2. 东方财富（stock_zh_a_hist）
-3. 新浪财经（stock_zh_a_daily）
+真实模式通过 providers.market 按配置切换：
+  MARKET_PROVIDER=auto|eastmoney|sina|fuyao|tonghuashun
+  MARKET_PROVIDER_CHAIN=fuyao,tonghuashun,eastmoney,sina
 
 另支持离线 demo 合成行情，用于无网络/未装 akshare 时测试。
 
@@ -99,110 +98,31 @@ def _retry(fn, times: int = 2, delay: float = 1.0):
     raise last
 
 
-def _sina_symbol(symbol: str) -> str:
-    """6/5/9 开头 -> 沪市 sh；其余按深市 sz 处理（北交所暂未覆盖）。"""
-    return ("sh" if symbol[0] in "569" else "sz") + symbol
-
-
 def fetch_fuyao(symbol: str) -> pd.DataFrame:
-    """可选 Fuyao 适配器桩：无 key 时直接跳过；有 key 但未实现完整协议时给出明确错误。
+    """兼容入口：委托 providers.market。"""
+    from providers import market as market_providers
+    return market_providers.fetch_fuyao(symbol)
 
-    不要求配置 API key；缺省走东财/新浪即可。
-    """
-    if not config.FUYAO_API_KEY:
-        raise RuntimeError("未配置 FUYAO_API_KEY，跳过 Fuyao 源")
-    if not config.FUYAO_BASE_URL:
-        raise RuntimeError("已配置 FUYAO_API_KEY 但未设置 FUYAO_BASE_URL")
-    # 桩：预留 HTTP JSON K 线接入点；当前仓库不捆绑第三方协议细节。
-    raise RuntimeError(
-        f"Fuyao 适配器未实现具体协议（symbol={symbol}）；"
-        "请清空 FUYAO_API_KEY 以回退东财/新浪，或自行补全 fetch_fuyao"
-    )
+
+def fetch_tonghuashun(symbol: str) -> pd.DataFrame:
+    from providers import market as market_providers
+    return market_providers.fetch_tonghuashun(symbol)
 
 
 def fetch_eastmoney(symbol: str) -> pd.DataFrame:
-    """东方财富，前复权历史行情。"""
-    import akshare as ak
-
-    try:
-        raw = ak.stock_zh_a_hist(
-            symbol=symbol,
-            period=config.PERIOD,
-            start_date=config.START_DATE,
-            end_date=pd.Timestamp.today().strftime("%Y%m%d"),
-            adjust=config.ADJUST,
-        )
-    except json.JSONDecodeError as exc:
-        raise RuntimeError(
-            f"东方财富 JSON 解析失败（可能返回 HTML）: {exc}"
-        ) from exc
-    if isinstance(raw, str) or looks_like_html(raw):
-        ensure_json_payload(raw, "东方财富")
-    if raw is None or (hasattr(raw, "empty") and raw.empty):
-        raise RuntimeError(f"东方财富未返回 {symbol} 的行情")
-    return pd.DataFrame(
-        {
-            "date": pd.to_datetime(raw["日期"]),
-            "open": raw["开盘"].astype(float),
-            "high": raw["最高"].astype(float),
-            "low": raw["最低"].astype(float),
-            "close": raw["收盘"].astype(float),
-            "volume": raw["成交量"].astype(float),
-        }
-    ).sort_values("date").reset_index(drop=True)
+    from providers import market as market_providers
+    return market_providers.fetch_eastmoney(symbol)
 
 
 def fetch_sina(symbol: str) -> pd.DataFrame:
-    """新浪财经，前复权历史行情（备用源）。"""
-    import akshare as ak
-
-    try:
-        raw = ak.stock_zh_a_daily(symbol=_sina_symbol(symbol), adjust="qfq")
-    except json.JSONDecodeError as exc:
-        raise RuntimeError(f"新浪 JSON 解析失败（可能返回 HTML）: {exc}") from exc
-    if isinstance(raw, str) or looks_like_html(raw):
-        ensure_json_payload(raw, "新浪")
-    if raw is None or (hasattr(raw, "empty") and raw.empty):
-        raise RuntimeError(f"新浪未返回 {symbol} 的行情")
-    df = pd.DataFrame(
-        {
-            "date": pd.to_datetime(raw["date"]),
-            "open": raw["open"].astype(float),
-            "high": raw["high"].astype(float),
-            "low": raw["low"].astype(float),
-            "close": raw["close"].astype(float),
-            "volume": raw["volume"].astype(float),
-        }
-    )
-    df = df[df["date"] >= pd.Timestamp(config.START_DATE)]
-    return df.sort_values("date").reset_index(drop=True)
+    from providers import market as market_providers
+    return market_providers.fetch_sina(symbol)
 
 
 def fetch_akshare(symbol: str) -> pd.DataFrame:
-    """拉取真实 A 股行情：可选 Fuyao → 东财 → 新浪，各重试一次。"""
-    _apply_proxy_policy()
-    try:
-        import akshare  # noqa: F401
-    except ImportError as exc:  # pragma: no cover
-        raise RuntimeError(
-            "未安装 akshare，无法拉取真实行情。\n"
-            "请先执行: pip install akshare\n"
-            "或者使用离线模式: python runner.py --demo"
-        ) from exc
-
-    sources = []
-    if config.FUYAO_API_KEY:
-        sources.append((fetch_fuyao, "Fuyao"))
-    sources.extend(((fetch_eastmoney, "东方财富"), (fetch_sina, "新浪")))
-
-    errors = []
-    for fn, name in sources:
-        try:
-            return _retry(lambda f=fn: f(symbol), times=2, delay=1.0)
-        except Exception as exc:  # noqa: BLE001
-            errors.append(f"{name}: {exc}")
-
-    raise RuntimeError("所有数据源均失败：" + " | ".join(errors))
+    """拉取真实 A 股行情：按 MARKET_PROVIDER / CHAIN 切换适配器。"""
+    from providers import market as market_providers
+    return market_providers.fetch(symbol)
 
 
 def load_or_fetch(symbol: str, refresh: bool = False) -> pd.DataFrame:

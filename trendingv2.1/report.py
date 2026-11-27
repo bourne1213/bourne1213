@@ -161,13 +161,16 @@ def build_daily_report(
         news_data = {"macro": [], "stocks": {s: [] for s in stocks}}
     else:
         news_data = news.fetch_all(stocks)
+    news_status = news.get_last_status() if not use_demo else None
     news_fetch_ok = bool(news_data.get("macro")) or any(news_data.get("stocks", {}).values())
     macro_texts = [n["content"] for n in news_data.get("macro", [])]
     stock_texts = {s: [n["content"] for n in news_data.get("stocks", {}).get(s, [])] for s in stocks}
 
     set_progress("大模型分析", "分析新闻情绪…", 13)
     llm_res = llm.analyze_news(macro_texts, stock_texts)
+    llm_status = llm.get_last_status()
     market_view = _market_view(llm_res, macro_texts)
+
 
     sector_map = watchlist.sector_map()
 
@@ -358,6 +361,18 @@ def build_daily_report(
         sec = p.get("sector") or "其他"
         picks_by_sector.setdefault(sec, []).append(p)
 
+    # Provider snapshot for dashboard status chips
+    from providers import market as market_providers
+    from providers.base import provider_snapshot
+
+    market_prov_status = market_providers.get_last_status()
+    providers_block = provider_snapshot(
+        market=market_prov_status,
+        llm=llm_status,
+        news=news_status,
+    )
+
+    llm_fallback = bool(llm_status and llm_status.fallback)
     report = {
         "project": config.PROJECT_NAME,
         "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -367,6 +382,7 @@ def build_daily_report(
         "data_fresh": data_fresh,
         "stale_stock_count": stale_count,
         "llm_enabled": bool(llm_res),
+        "llm_fallback": llm_fallback or (not bool(llm_res)),
         "model": config.LLM_MODEL if llm_res else None,
         "market_view": market_view,
         "recs": recs,
@@ -377,13 +393,23 @@ def build_daily_report(
                           "error": llm.finalize_error if news_scoring_failed else None},
         "data_quality": {"calendar_ok": calendar_ok, "screen": screen_stats,
                           "screen_error": screen_error},
+        "providers": providers_block,
         "status": {
             "llm_ok": bool(llm_res),
+            "llm_provider": (llm_status.provider if llm_status else ""),
+            "llm_detail": (llm_status.detail if llm_status else ""),
+            "llm_fallback": (llm_status.fallback if llm_status else "") or (
+                "dictionary" if not llm_res else ""
+            ),
             "model": config.LLM_MODEL if llm_res else None,
             "news_fetch_ok": news_fetch_ok,
+            "news_provider": (news_status.provider if news_status else ""),
+            "news_detail": (news_status.detail if news_status else ""),
             # 全市场扫描若在候选股生成前失败，不应误报为新闻打分失败。
             "news_scoring_ok": not news_scoring_failed,
             "data_ok": data_fetch_ok,
+            "market_provider": market_prov_status.provider,
+            "market_detail": market_prov_status.detail,
             "calendar_ok": calendar_ok,
             "screen_ok": (not do_screener or not config.SCREEN_ENABLED or
                           (not screen_failed and bool(screen_stats and

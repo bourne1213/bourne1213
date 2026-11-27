@@ -28,12 +28,21 @@ def _apply_proxy() -> None:
     data_mod._apply_proxy_policy()
 
 
+def _ak_call(ak, *names: str):
+    for name in names:
+        fn = getattr(ak, name, None)
+        if callable(fn):
+            return fn
+    raise RuntimeError(f"akshare 缺少接口: {' / '.join(names)}")
+
+
 def get_snapshot() -> pd.DataFrame:
     import json
     import akshare as ak
     _apply_proxy()
+    spot = _ak_call(ak, "stock_zh_a_spot_sina", "stock_zh_a_spot_em", "stock_zh_a_spot")
     try:
-        snap = ak.stock_zh_a_spot()
+        snap = spot()
     except json.JSONDecodeError as exc:
         raise RuntimeError(f"全市场快照 JSON 解析失败（可能返回 HTML）: {exc}") from exc
     if isinstance(snap, str) or data_mod.looks_like_html(snap):
@@ -41,6 +50,7 @@ def get_snapshot() -> pd.DataFrame:
     if snap is None or getattr(snap, "empty", False):
         raise RuntimeError("全市场快照为空")
     return snap
+
 
 
 def filter_universe(snap: pd.DataFrame) -> pd.DataFrame:
@@ -81,22 +91,33 @@ def fetch_hist(code: str, last_td: pd.Timestamp | None = None) -> pd.DataFrame:
 
     _apply_proxy()
     import json
+    hist = _ak_call(ak, "stock_zh_a_hist_sina", "stock_zh_a_daily")
     try:
-        raw = ak.stock_zh_a_daily(symbol=code, adjust="qfq")
+        if hist.__name__ == "stock_zh_a_hist_sina":
+            raw = hist(
+                symbol=code,
+                period="daily",
+                start_date=config.START_DATE,
+                end_date=pd.Timestamp.today().strftime("%Y%m%d"),
+                adjust="qfq",
+            )
+        else:
+            raw = hist(symbol=code, adjust="qfq")
     except json.JSONDecodeError as exc:
         raise RuntimeError(f"{code} 历史行情 JSON 解析失败: {exc}") from exc
     if isinstance(raw, str) or data_mod.looks_like_html(raw):
         data_mod.ensure_json_payload(raw, f"{code} 历史行情")
     if raw is None or getattr(raw, "empty", True):
         raise RuntimeError(f"{code} 历史行情为空")
+    date_col = "date" if "date" in raw.columns else "日期"
     df = pd.DataFrame(
         {
-            "date": pd.to_datetime(raw["date"]),
-            "open": raw["open"].astype(float),
-            "high": raw["high"].astype(float),
-            "low": raw["low"].astype(float),
-            "close": raw["close"].astype(float),
-            "volume": raw["volume"].astype(float),
+            "date": pd.to_datetime(raw[date_col]),
+            "open": raw["open" if "open" in raw.columns else "开盘"].astype(float),
+            "high": raw["high" if "high" in raw.columns else "最高"].astype(float),
+            "low": raw["low" if "low" in raw.columns else "最低"].astype(float),
+            "close": raw["close" if "close" in raw.columns else "收盘"].astype(float),
+            "volume": raw["volume" if "volume" in raw.columns else "成交量"].astype(float),
         }
     ).sort_values("date").reset_index(drop=True)
     _SCREEN_CACHE.mkdir(parents=True, exist_ok=True)
@@ -117,7 +138,8 @@ def fetch_benchmark() -> pd.DataFrame:
         except Exception:  # noqa: BLE001
             pass
     _apply_proxy()
-    raw = ak.stock_zh_index_daily(symbol="sh000300")
+    index_fn = _ak_call(ak, "index_zh_daily_sina", "stock_zh_index_daily")
+    raw = index_fn(symbol="sh000300")
     df = pd.DataFrame(
         {
             "date": pd.to_datetime(raw["date"]),

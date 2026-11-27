@@ -35,9 +35,23 @@ DATA_DIR = Path(__file__).parent / "data"
 # 若你在海外、确实需要走代理，改为 False 并确保代理已启动。
 BYPASS_PROXY = True
 
-# 可选行情适配：设置 FUYAO_API_KEY 时 data.fetch_fuyao 可用；未设置则跳过，沿用东财/新浪。
+# ---------- 可插拔行情源（providers/market.py） ----------
+# MARKET_PROVIDER=auto 按 CHAIN 依次尝试；也可钉死为 eastmoney|sina|fuyao|tonghuashun
+MARKET_PROVIDER = os.environ.get("MARKET_PROVIDER", "auto")
+# auto 模式下的尝试顺序；缺 key 的 HTTP 源会自动跳过
+MARKET_PROVIDER_CHAIN = os.environ.get(
+    "MARKET_PROVIDER_CHAIN", "fuyao,tonghuashun,eastmoney,sina"
+)
+# 可选 HTTP K 线适配（GET {BASE}/kline?symbol=&period=&adjust= ，Bearer key）
 FUYAO_API_KEY = os.environ.get("FUYAO_API_KEY", "")
 FUYAO_BASE_URL = os.environ.get("FUYAO_BASE_URL", "")
+TONGHUASHUN_API_KEY = os.environ.get("TONGHUASHUN_API_KEY", "")
+TONGHUASHUN_BASE_URL = os.environ.get("TONGHUASHUN_BASE_URL", "")
+
+# ---------- 可插拔新闻源（providers/news_providers.py） ----------
+# 逗号分隔：cctv,cls,stock_em；设 none/off 可关闭新闻（看板不中断）
+NEWS_SOURCES = os.environ.get("NEWS_SOURCES", "cctv,cls,stock_em")
+
 
 # ---------- 策略（双均线金叉/死叉） ----------
 SHORT_MA = 5   # 短期均线窗口
@@ -93,12 +107,17 @@ TRAILING_STOP_PCT = 0.0    # 移动止损：自最高点回落 X% 卖出（0=关
 # 止损/止盈命中时动作固定为「必须卖出」，覆盖综合分阈值；
 # 模拟盘自动卖出；真实持仓仅 advisory（写入日报 risk_notes / action），不接券商。
 
-# ---------- 大模型语义分析（可选，填了 key 才启用） ----------
+# ---------- 大模型语义分析（可插拔，providers/llm_providers.py） ----------
+# LLM_PROVIDER=auto|openai|dictionary
+#   auto       — 有 LLM_API_KEY 则走 OpenAI 兼容接口，否则词典法
+#   openai     — 强制 OpenAI 兼容（需 key + base_url + model）
+#   dictionary — 强制词典法（不调用外网）
+LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "auto")
 # 推荐用环境变量，避免密钥写进代码被误提交： export LLM_API_KEY=sk-...
 LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
 LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "https://api.deepseek.com/v1")
 LLM_MODEL = os.environ.get("LLM_MODEL", "deepseek-chat")
-LLM_PROXY = ""                              # 访问海外接口需代理时填，如 http://127.0.0.1:7897
+LLM_PROXY = os.environ.get("LLM_PROXY", "")  # 访问海外接口需代理时填，如 http://127.0.0.1:7897
 
 # ---------- 全市场选股（每天推荐买入的股票） ----------
 SCREEN_ENABLED = True       # 是否在 --daily 里跑全市场选股
